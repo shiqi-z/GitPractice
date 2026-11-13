@@ -1,0 +1,133 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "GitHub 公共 API（接口测试练习）",
+    "version": "1.0.0",
+    "description": "用于 Apifox 接口测试练习：覆盖查询用户、查询用户仓库两个接口。数据源为 GitHub 公开 API，无需登录即可调用（有每小时 60 次的匿名限额）。"
+  },
+  "servers": [
+    {
+      "url": "https://api.github.com",
+      "description": "GitHub 生产环境"
+    }
+  ],
+  "paths": {
+    "/users/{username}": {
+      "get": {
+        "summary": "查询用户信息",
+        "description": "按用户名查询 GitHub 用户公开信息。用户不存在时返回 404。",
+        "operationId": "getUser",
+        "parameters": [
+          {
+            "name": "username",
+            "in": "path",
+            "required": true,
+            "description": "GitHub 用户名",
+            "schema": { "type": "string" },
+            "example": "shiqi-z"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "查询成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "login": { "type": "string", "description": "用户名" },
+                    "id": { "type": "integer", "description": "用户数字 ID" },
+                    "html_url": { "type": "string", "description": "主页地址" },
+                    "public_repos": { "type": "integer", "description": "公开仓库数量" },
+                    "created_at": { "type": "string", "description": "账号创建时间" }
+                  }
+                },
+                "example": {
+                  "login": "shiqi-z",
+                  "id": 353951993,
+                  "html_url": "https://github.com/shiqi-z",
+                  "public_repos": 1,
+                  "created_at": "2026-11-08T04:04:00Z"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "用户不存在",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "message": { "type": "string" }
+                  }
+                },
+                "example": { "message": "Not Found" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/users/{username}/repos": {
+      "get": {
+        "summary": "查询用户的仓库列表",
+        "description": "返回指定用户的所有公开仓库，支持分页与排序。",
+        "operationId": "listUserRepos",
+        "parameters": [
+          {
+            "name": "username",
+            "in": "path",
+            "required": true,
+            "description": "GitHub 用户名",
+            "schema": { "type": "string" },
+            "example": "shiqi-z"
+          },
+          {
+            "name": "per_page",
+            "in": "query",
+            "required": false,
+            "description": "每页数量，1-100",
+            "schema": { "type": "integer", "default": 30, "minimum": 1, "maximum": 100 }
+          },
+          {
+            "name": "sort",
+            "in": "query",
+            "required": false,
+            "description": "排序字段",
+            "schema": { "type": "string", "enum": ["created", "updated", "pushed", "full_name"], "default": "created" }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "查询成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "name": { "type": "string", "description": "仓库名" },
+                      "full_name": { "type": "string", "description": "完整名称 owner/repo" },
+                      "private": { "type": "boolean", "description": "是否私有" },
+                      "html_url": { "type": "string", "description": "仓库地址" }
+                    }
+                  }
+                },
+                "example": [
+                  {
+                    "name": "GitPractice",
+                    "full_name": "shiqi-z/GitPractice",
+                    "private": false,
+                    "html_url": "https://github.com/shiqi-z/GitPractice"
+                  }
+                ]
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}
