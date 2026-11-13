@@ -43,13 +43,21 @@ EMPTY_FIELD_CASE = """| 编号 | 场景 | 步骤 | 预期结果 |
 """
 
 
+SIX_COLUMN_CASE = """| 编号 | 标题 | 前置条件 | 操作步骤 | 预期结果 | 优先级 |
+|---|---|---|---|---|---|
+| TC-401 | 登录成功 | 已存在账号 admin / 123456 | 输入账号密码，点击登录 | 跳转到首页 | P0 |
+"""
+
+
 @pytest.fixture
 def make_dir(tmp_path):
-    """在临时目录里生成用例文件，返回该目录。"""
+    """在临时目录里生成用例文件（支持子目录），返回该目录。"""
 
     def _make(files: dict[str, str]) -> Path:
         for name, content in files.items():
-            (tmp_path / name).write_text(content, encoding="utf-8")
+            target = tmp_path / name
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_text(content, encoding="utf-8")
         return tmp_path
 
     return _make
@@ -92,6 +100,36 @@ def test_empty_expected_result_is_rejected(make_dir, capsys):
 def test_empty_directory_is_rejected(make_dir):
     directory = make_dir({})
     assert run_checker(directory) == 2
+
+
+def test_six_column_format_passes(make_dir, capsys):
+    """六要素格式（步骤列叫「操作步骤」）也必须能通过检查。"""
+    directory = make_dir({"login_v2.md": SIX_COLUMN_CASE})
+    assert run_checker(directory) == 0
+    assert "全部检查通过" in capsys.readouterr().out
+
+
+def test_missing_step_column_is_rejected(make_dir, capsys):
+    """既没有「步骤」也没有「操作步骤」的表格必须被拒绝。"""
+    directory = make_dir({"no_step.md": MISSING_COLUMN_CASE})
+    assert run_checker(directory) == 1
+    assert "缺少必需列" in capsys.readouterr().out
+
+
+def test_subdirectories_are_scanned(make_dir, capsys):
+    """子目录（如 test_cases/api/）下的用例也要被检查到。"""
+    directory = make_dir({"api/users.md": GOOD_CASE})
+    assert run_checker(directory) == 0
+    out = capsys.readouterr().out
+    assert "api/users.md" in out
+    assert "用例  2 条" in out
+
+
+def test_duplicate_id_across_subdirectories_is_rejected(make_dir, capsys):
+    """主目录和子目录之间同样不允许编号撞车。"""
+    directory = make_dir({"a.md": GOOD_CASE, "api/b.md": DUPLICATE_CASE})
+    assert run_checker(directory) == 1
+    assert "编号重复" in capsys.readouterr().out
 
 
 def test_real_test_cases_in_repo_pass(capsys):

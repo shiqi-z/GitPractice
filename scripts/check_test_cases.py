@@ -15,7 +15,9 @@ import re
 import sys
 from pathlib import Path
 
-REQUIRED_COLUMNS = ["编号", "场景", "步骤", "预期结果"]
+REQUIRED_COLUMNS = ["编号", "预期结果"]
+# 步骤列允许两种写法：4 列旧格式用「步骤」，6 列六要素格式用「操作步骤」
+STEP_COLUMN_CANDIDATES = ["步骤", "操作步骤"]
 # 编号必须是 TC- 加至少三位数字，例如 TC-001
 ID_PATTERN = re.compile(r"^TC-\d{3,}$")
 # Markdown 表格的分隔行，例如 |---|---|
@@ -70,7 +72,7 @@ def find_tables(lines: list[str]) -> list[tuple[int, list[str], list[tuple[int, 
     return tables
 
 
-def check_file(path: Path, seen_ids: dict[str, str]) -> tuple[list[Problem], int]:
+def check_file(path: Path, root: Path, seen_ids: dict[str, str]) -> tuple[list[Problem], int]:
     """检查单个用例文件，返回 (问题列表, 有效用例数)。"""
     problems: list[Problem] = []
     lines = path.read_text(encoding="utf-8").splitlines()
@@ -78,13 +80,20 @@ def check_file(path: Path, seen_ids: dict[str, str]) -> tuple[list[Problem], int
 
     for header_line, header, rows in find_tables(lines):
         missing = [name for name in REQUIRED_COLUMNS if name not in header]
+        if not any(name in header for name in STEP_COLUMN_CANDIDATES):
+            missing.append("、".join(f"「{name}」" for name in STEP_COLUMN_CANDIDATES))
         if missing:
             problems.append(
                 Problem(path, header_line, "-", f"表格缺少必需列: {', '.join(missing)}")
             )
             continue
 
-        index_of = {name: header.index(name) for name in REQUIRED_COLUMNS}
+        step_name = next(name for name in STEP_COLUMN_CANDIDATES if name in header)
+        index_of = {
+            name: header.index(name)
+            for name in ("编号", "场景", step_name, "预期结果")
+            if name in header
+        }
 
         for line_no, cells in rows:
             case_id = cells[index_of["编号"]] if len(cells) > index_of["编号"] else ""
@@ -116,9 +125,11 @@ def check_file(path: Path, seen_ids: dict[str, str]) -> tuple[list[Problem], int
                     )
                 )
                 continue
-            seen_ids[case_id] = path.name
+            seen_ids[case_id] = str(path.relative_to(root))
 
-            for name in ("场景", "步骤", "预期结果"):
+            for name in index_of:
+                if name == "编号":
+                    continue
                 value = cells[index_of[name]]
                 if len(value) < 2:
                     problems.append(
@@ -138,7 +149,7 @@ def main(argv: list[str]) -> int:
         print(f"[ERROR] 用例目录不存在: {case_dir}")
         return 2
 
-    files = sorted(case_dir.glob("*.md"))
+    files = sorted(case_dir.rglob("*.md"))
     if not files:
         print(f"[ERROR] {case_dir} 下没有找到任何 .md 用例文件")
         return 2
@@ -150,10 +161,11 @@ def main(argv: list[str]) -> int:
     print(f"检查目录: {case_dir}")
     print("-" * 60)
     for path in files:
-        problems, count = check_file(path, seen_ids)
+        problems, count = check_file(path, case_dir, seen_ids)
         total_cases += count
         status = "OK" if not problems else f"{len(problems)} 个问题"
-        print(f"{path.name:<24} 用例 {count:>2} 条   {status}")
+        rel = str(path.relative_to(case_dir))
+        print(f"{rel:<24} 用例 {count:>2} 条   {status}")
         all_problems.extend(problems)
 
     print("-" * 60)
